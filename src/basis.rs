@@ -4,31 +4,48 @@
 /// Full double-precision rectangular representation,
 /// for applications where precision matters.
 pub mod lossless {
-
     pub use self::basis::Basis;
+    pub use self::basis::Raw as RawBasis;
     pub mod basis {
         use super::KetRef;
 
         pub type Iter<'a> = Box<Iterator<Item=KetRef<'a>> + 'a>;
 
+        // invariants:
+        //  - data.len() is divisible by 2 * width
+        // contracts that aren't strictly protected as invariants:
+        //  - eigenvectors SHOULD be orthogonal
+        //  - eigenvectors SHOULD be normalized
         #[derive(Debug, Clone, PartialEq)]
         pub struct Basis {
-            rank: usize,
+            width: usize,
             // reals of ket 1, then imags of ket 1, then reals of ket 2...
             data: Vec<f64>,
         }
 
         impl Basis {
-            pub fn new(data: Vec<f64>, rank: usize) -> Basis {
-                Raw { data: data, rank: rank }.validate()
+            pub fn new(data: Vec<f64>, width: usize) -> Basis {
+                Raw { data, width }.validate()
             }
 
-            pub fn rank(&self) -> usize { self.rank }
+            // takes a tuple to be forward-compatible with
+            // a possible overload in the future for KetRef
+            pub fn insert(&mut self, (real, imag): (&[f64], &[f64])) {
+                assert_eq!(self.width, real.len());
+                assert_eq!(self.width, imag.len());
+                self.data.extend_from_slice(real);
+                self.data.extend_from_slice(imag);
+            }
+
+            /// Number of dimensions in a ket.
+            pub fn width(&self) -> usize { self.width }
+            /// Number of kets
+            pub fn rank(&self) -> usize { self.data.len() / (2 * self.width) }
             pub fn ket(&self, i: usize) -> KetRef {
-                let r = self.rank;
+                let w = self.width;
                 KetRef {
-                    real: &self.data[r * (2 * i + 0) .. r * (2 * i + 1)],
-                    imag: &self.data[r * (2 * i + 1) .. r * (2 * i + 2)],
+                    real: &self.data[w * (2 * i + 0) .. w * (2 * i + 1)],
+                    imag: &self.data[w * (2 * i + 1) .. w * (2 * i + 2)],
                 }
             }
 
@@ -39,18 +56,17 @@ pub mod lossless {
             pub fn lossy_compress(&self) -> ::basis::compact::Basis {
                 use ::complex::compact::PhaseTable;
 
-                let rank = self.rank;
                 let table = PhaseTable::get();
                 let mut norm = vec![];
                 let mut phase = vec![];
-                for i in 0..rank {
-                    let KetRef { real, imag } = self.ket(i);
-                    for k in 0..rank {
-                        phase.push(table.nearest_phase(imag[k].atan2(real[k])));
-                        norm.push((real[k]*real[k] + imag[k]*imag[k]).sqrt() as f32);
+                for ket in self.iter() {
+                    for c in ket.iter() {
+                        phase.push(table.nearest_phase(c.imag.atan2(c.real)));
+                        norm.push(c.sqnorm().sqrt() as f32);
                     }
                 }
-                ::basis::compact::basis::Raw { rank, phase, norm }.validate()
+                let width = self.width;
+                ::basis::compact::basis::Raw { width, phase, norm }.validate()
             }
         }
 
@@ -58,22 +74,22 @@ pub mod lossless {
         #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
         #[derive(Debug, Clone, PartialEq)]
         pub struct Raw {
-            pub rank: usize,
+            pub width: usize,
             pub data: Vec<f64>,
         }
 
         impl Raw {
             pub fn validate(self) -> Basis {
-                let Raw { rank, data } = self;
-                assert_eq!(data.len(), 2 * rank * rank);
-                Basis { rank, data }
+                let Raw { width, data } = self;
+                assert_eq!(data.len() % (2 * width), 0);
+                Basis { width, data }
             }
         }
 
         impl Basis {
             pub fn raw(self) -> Raw {
-                let Basis { rank, data } = self;
-                Raw { rank, data }
+                let Basis { width, data } = self;
+                Raw { width, data }
             }
         }
     }
@@ -95,10 +111,8 @@ pub mod lossless {
 
         impl Ket {
             pub fn as_ref(&self) -> KetRef {
-                KetRef {
-                    real: &self.real,
-                    imag: &self.imag,
-                }
+                let Ket { ref real, ref imag } = *self;
+                KetRef { real, imag }
             }
 
             pub fn at(&self, i: usize) -> Rect { self.as_ref().at(i) }
@@ -155,30 +169,47 @@ pub mod lossless {
 /// Suitable for e.g. band uncrossing.
 pub mod compact {
     pub use self::basis::Basis;
+    pub use self::basis::Raw as RawBasis;
     pub mod basis {
         use super::KetRef;
 
         pub type Iter<'a> = Box<Iterator<Item=KetRef<'a>> + 'a>;
 
+        // invariants:
+        //  - norm.len() == phase.len()
+        //  - norm.len() is divisible by width
+        // contracts that aren't strictly protected as invariants:
+        //  - eigenvectors SHOULD be orthogonal
+        //  - eigenvectors SHOULD be normalized
         #[derive(Debug, Clone)]
         #[derive(PartialEq)]
         pub struct Basis {
-            rank: usize,
+            width: usize,
             norm:  Vec<f32>,
             phase: Vec<u8>,
         }
 
         impl Basis {
-            pub fn new(norm: Vec<f32>, phase: Vec<u8>, rank: usize) -> Basis {
-                Raw { norm, phase, rank }.validate()
+            pub fn new(norm: Vec<f32>, phase: Vec<u8>, width: usize) -> Basis {
+                Raw { norm, phase, width }.validate()
             }
 
-            pub fn rank(&self) -> usize { self.rank }
+            // takes a tuple to be forward-compatible with
+            // a possible overload in the future for KetRef
+            pub fn insert(&mut self, (norm, phase): (&[f32], &[u8])) {
+                assert_eq!(self.width, norm.len());
+                assert_eq!(self.width, phase.len());
+                self.norm.extend_from_slice(norm);
+                self.phase.extend_from_slice(phase);
+            }
+
+            pub fn rank(&self) -> usize { self.norm.len() / self.width }
+            pub fn width(&self) -> usize { self.width }
             pub fn ket(&self, i: usize) -> KetRef {
-                let r = self.rank;
+                let w = self.width;
                 KetRef {
-                    norm:  &self.norm [r * i .. r * (i + 1)],
-                    phase: &self.phase[r * i .. r * (i + 1)],
+                    norm:  &self.norm [w * i .. w * (i + 1)],
+                    phase: &self.phase[w * i .. w * (i + 1)],
                 }
             }
 
@@ -191,24 +222,24 @@ pub mod compact {
         #[derive(Debug, Clone, PartialEq)]
         #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
         pub struct Raw {
-            pub rank: usize,
+            pub width: usize,
             pub norm:  Vec<f32>,
             pub phase: Vec<u8>,
         }
 
         impl Raw {
             pub fn validate(self) -> Basis {
-                let Raw { rank, norm, phase } = self;
-                assert_eq!(norm.len(),  rank * rank);
-                assert_eq!(phase.len(), rank * rank);
-                Basis { rank, norm, phase }
+                let Raw { width, norm, phase } = self;
+                assert_eq!(norm.len(), phase.len());
+                assert_eq!(norm.len() % width, 0);
+                Basis { width, norm, phase }
             }
         }
 
         impl Basis {
             pub fn raw(self) -> Raw {
-                let Basis { rank, norm, phase } = self;
-                Raw { rank, norm, phase }
+                let Basis { width, norm, phase } = self;
+                Raw { width, norm, phase }
             }
         }
     }
@@ -230,10 +261,8 @@ pub mod compact {
 
         impl Ket {
             pub fn as_ref(&self) -> KetRef {
-                KetRef {
-                    norm: &self.norm,
-                    phase: &self.phase,
-                }
+                let Ket { ref norm, ref phase } = *self;
+                KetRef { norm, phase }
             }
 
             pub fn at(&self, i: usize) -> Polar { self.as_ref().at(i) }
