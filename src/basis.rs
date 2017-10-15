@@ -1,5 +1,81 @@
+macro_rules! impl_common_trash {
+    (
+        types: [$Basis:ident, $Ket:ident, $KetRef:ident]
+        traits: [$AsKetRef:ident]
+        elements: [$Complex:ident { $a:ident : $A:path, $b:ident : $B:path }]
+    ) => {
+        pub type IntoIter = Box<Iterator<Item=$Complex>>;
+        pub type Iter<'a> = Box<Iterator<Item=$Complex> + 'a>;
 
+        /// An owned ket.
+        #[derive(Debug, Clone)]
+        pub struct $Ket {
+            pub(crate) $a: Vec<$A>,
+            pub(crate) $b: Vec<$B>,
+        }
 
+        impl $Ket {
+            pub fn new($a: Vec<$A>, $b: Vec<$B>) -> Self {
+                $Ket { $a, $b }
+            }
+
+            pub fn as_ref(&self) -> $KetRef {
+                let $Ket { ref $a, ref $b } = *self;
+                $KetRef { $a, $b }
+            }
+
+            pub fn $a(&self) -> &[$A] { &self.$a }
+            pub fn $b(&self) -> &[$B] { &self.$b }
+
+            // can't do Index because we can't return a borrow
+            pub fn at(&self, i: usize) -> $Complex { self.as_ref().at(i) }
+            pub fn overlap<K: $AsKetRef>(self, other: &K) -> f64 { self.as_ref().overlap(other) }
+            pub fn iter(&self) -> Iter { self.as_ref().iter() }
+        }
+
+        impl IntoIterator for $Ket {
+            type Item = $Complex;
+            type IntoIter = IntoIter;
+            fn into_iter(self) -> Self::IntoIter {
+                let $Ket { $a, $b } = self;
+                Box::new($a.into_iter().zip($b).map(|($a, $b)| $Complex { $a, $b }))
+            }
+        }
+
+        pub trait $AsKetRef { fn as_ket_ref(&self) -> $KetRef; }
+        impl<'a> $AsKetRef for $KetRef<'a> { fn as_ket_ref(&self) -> $KetRef { *self } }
+        impl $AsKetRef for $Ket { fn as_ket_ref(&self) -> $KetRef { self.as_ref() } }
+
+        /// A not-owned ket.
+        #[derive(Debug, Copy, Clone)]
+        pub struct $KetRef<'a> {
+            pub(crate) $a: &'a [$A],
+            pub(crate) $b: &'a [$B],
+        }
+
+        impl<'a> $KetRef<'a> {
+            pub fn new($a: &'a [$A], $b: &'a [$B]) -> Self {
+                $KetRef { $a, $b }
+            }
+
+            // can't do Index because we can't return a borrow
+            pub fn at(&self, i: usize) -> $Complex {
+                $Complex {
+                    $a: self.$a[i],
+                    $b: self.$b[i],
+                }
+            }
+
+            pub fn $a(&self) -> &[$A] { self.$a }
+            pub fn $b(&self) -> &[$B] { self.$b }
+
+            pub fn iter(&self) -> Iter<'a> {
+                let &$KetRef { $a, $b } = self;
+                Box::new($a.iter().zip($b).map(|(&$a, &$b)| $Complex { $a, $b }))
+            }
+        }
+    };
+}
 
 /// Full double-precision rectangular representation,
 /// for applications where precision matters.
@@ -99,60 +175,14 @@ pub mod lossless {
     pub use self::ket::AsKetRef;
     pub mod ket {
         use ::complex::lossless::Rect;
-        pub type IntoIter = Box<Iterator<Item=Rect>>;
-        pub type Iter<'a> = Box<Iterator<Item=Rect> + 'a>;
 
-        /// An owned ket.
-        #[derive(Debug, Clone)]
-        pub struct Ket {
-            pub(crate) real: Vec<f64>,
-            pub(crate) imag: Vec<f64>,
-        }
-
-        impl Ket {
-            pub fn as_ref(&self) -> KetRef {
-                let Ket { ref real, ref imag } = *self;
-                KetRef { real, imag }
-            }
-
-            pub fn real(&self) -> &[f64] { &self.real }
-            pub fn imag(&self) -> &[f64] { &self.imag }
-
-            pub fn at(&self, i: usize) -> Rect { self.as_ref().at(i) }
-            pub fn overlap<K: AsKetRef>(self, other: &K) -> f64 { self.as_ref().overlap(other) }
-            pub fn iter(&self) -> Iter { self.as_ref().iter() }
-        }
-
-        impl IntoIterator for Ket {
-            type Item = Rect;
-            type IntoIter = IntoIter;
-            fn into_iter(self) -> Self::IntoIter {
-                let Ket { real, imag } = self;
-                Box::new(real.into_iter().zip(imag).map(|(real,imag)| Rect { real, imag }))
-            }
-        }
-
-        pub trait AsKetRef { fn as_ket_ref(&self) -> KetRef; }
-        impl<'a> AsKetRef for KetRef<'a> { fn as_ket_ref(&self) -> KetRef { *self } }
-        impl AsKetRef for Ket { fn as_ket_ref(&self) -> KetRef { self.as_ref() } }
-
-        #[derive(Debug, Copy, Clone)]
-        pub struct KetRef<'a> {
-            pub(crate) real: &'a [f64],
-            pub(crate) imag: &'a [f64],
+        impl_common_trash! {
+            types: [Basis, Ket, KetRef]
+            traits: [AsKetRef]
+            elements: [Rect { real: f64, imag: f64 }]
         }
 
         impl<'a> KetRef<'a> {
-            fn at(&self, i: usize) -> Rect {
-                Rect {
-                    real: self.real[i],
-                    imag: self.imag[i],
-                }
-            }
-
-            pub fn real(&self) -> &[f64] { self.real }
-            pub fn imag(&self) -> &[f64] { self.imag }
-
             pub fn overlap<K: AsKetRef>(self, other: &K) -> f64 {
                 let other = other.as_ket_ref();
                 assert_eq!(self.real.len(), other.real.len());
@@ -160,11 +190,6 @@ pub mod lossless {
                     .map(|i| (self.at(i).conj() * other.at(i)))
                     .fold(Rect::zero(), |a,b| a + b)
                     .sqnorm()
-            }
-
-            pub fn iter(&self) -> Iter<'a> {
-                let &KetRef { real, imag } = self;
-                Box::new(real.iter().zip(imag).map(|(&real, &imag)| Rect { real, imag }))
             }
         }
     }
@@ -255,56 +280,14 @@ pub mod compact {
     pub use self::ket::AsKetRef;
     pub mod ket {
         use ::complex::compact::{Rect, Polar, PhaseTable};
-        pub type IntoIter = Box<Iterator<Item=Polar>>;
-        pub type Iter<'a> = Box<Iterator<Item=Polar> + 'a>;
 
-        /// An owned ket.
-        #[derive(Debug, Clone)]
-        pub struct Ket {
-            pub(crate) norm:  Vec<f32>,
-            pub(crate) phase: Vec<u8>,
-        }
-
-        impl Ket {
-            pub fn as_ref(&self) -> KetRef {
-                let Ket { ref norm, ref phase } = *self;
-                KetRef { norm, phase }
-            }
-
-            pub fn norm(&self) -> &[f32] { &self.norm }
-            pub fn phase(&self) -> &[u8] { &self.phase }
-            pub fn at(&self, i: usize) -> Polar { self.as_ref().at(i) }
-            pub fn overlap<K: AsKetRef>(self, other: &K) -> f64 { self.as_ref().overlap(other) }
-        }
-
-        impl IntoIterator for Ket {
-            type Item = Polar;
-            type IntoIter = IntoIter;
-            fn into_iter(self) -> Self::IntoIter {
-                let Ket { norm, phase } = self;
-                Box::new(norm.into_iter().zip(phase)
-                    .map(|(norm, phase)| Polar { norm, phase }))
-            }
-        }
-
-        pub trait AsKetRef { fn as_ket_ref(&self) -> KetRef; }
-        impl<'a> AsKetRef for KetRef<'a> { fn as_ket_ref(&self) -> KetRef { *self } }
-        impl AsKetRef for Ket { fn as_ket_ref(&self) -> KetRef { self.as_ref() } }
-
-        #[derive(Debug, Copy, Clone)]
-        pub struct KetRef<'a> {
-            pub(crate) norm:  &'a [f32],
-            pub(crate) phase: &'a [u8],
+        impl_common_trash! {
+            types: [Basis, Ket, KetRef]
+            traits: [AsKetRef]
+            elements: [Polar { norm: f32, phase: u8 }]
         }
 
         impl<'a> KetRef<'a> {
-            fn at(&self, i: usize) -> Polar {
-                Polar {
-                    norm: self.norm[i],
-                    phase: self.phase[i],
-                }
-            }
-
             pub fn overlap<K: AsKetRef>(self, other: &K) -> f64 {
                 let other = other.as_ket_ref();
                 assert_eq!(self.norm.len(), other.norm.len());
@@ -313,14 +296,6 @@ pub mod compact {
                     .map(|i| (self.at(i).conj() * other.at(i)).to_rect(table))
                     .fold(Rect::zero(), |a,b| a + b)
                     .sqnorm() as f64
-            }
-
-            pub fn norm(&self) -> &[f32] { self.norm }
-            pub fn phase(&self) -> &[u8] { self.phase }
-            pub fn iter(&self) -> Iter<'a> {
-                let KetRef { norm, phase } = *self;
-                Box::new(norm.into_iter().zip(phase)
-                    .map(|(&norm, &phase)| Polar { norm, phase }))
             }
         }
     }
