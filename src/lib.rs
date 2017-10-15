@@ -22,7 +22,6 @@ pub mod lossless {
     pub use ::complex::lossless::Rect;
 
     pub use ::basis::lossless::basis::Basis;
-    pub use ::basis::lossless::basis::Raw as RawBasis;
     pub use ::basis::lossless::basis::Iter as BasisIter;
 
     pub use ::basis::lossless::ket::Ket;
@@ -37,7 +36,6 @@ pub mod compact {
     pub use ::complex::compact::Polar;
 
     pub use ::basis::compact::basis::Basis;
-    pub use ::basis::compact::basis::Raw as RawBasis;
     pub use ::basis::compact::basis::Iter as BasisIter;
 
     pub use ::basis::compact::ket::Ket;

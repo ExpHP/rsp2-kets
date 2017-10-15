@@ -77,6 +77,32 @@ macro_rules! impl_common_trash {
     };
 }
 
+macro_rules! forward_serde_impls {
+    (
+        serialize: [$Type:ident :: $cereal:ident]
+        deserialize: [$Cereal:ident :: $validate:ident]
+    ) => {
+        #[cfg(feature = "serde")]
+        impl ::serde::Serialize for $Type
+        {
+            fn serialize<S>(&self, s: S) -> Result<S::Ok, S::Error>
+            where S: ::serde::Serializer,
+            { self.clone().$cereal().serialize(s) }
+        }
+
+        #[cfg(feature = "serde")]
+        impl<'de> ::serde::Deserialize<'de> for $Type
+        {
+            fn deserialize<D>(d: D) -> Result<$Type, D::Error>
+            where D: ::serde::Deserializer<'de>
+            {
+                let cereal = <$Cereal as ::serde::Deserialize>::deserialize(d)?;
+                Ok(cereal.$validate())
+            }
+        }
+    };
+}
+
 /// Full double-precision rectangular representation,
 /// for applications where precision matters.
 pub(crate) mod lossless {
@@ -99,7 +125,7 @@ pub(crate) mod lossless {
 
         impl Basis {
             pub fn new(data: Vec<f64>, width: usize) -> Basis {
-                Raw { data, width }.validate()
+                Cereal { data, width }.validate()
             }
 
             // takes a tuple to be forward-compatible with
@@ -140,31 +166,38 @@ pub(crate) mod lossless {
                     }
                 }
                 let width = self.width;
-                ::compact::RawBasis { width, phase, norm }.validate()
+                ::basis::compact::basis::Cereal { width, phase, norm }.validate()
             }
         }
 
         /// Raw data type with no invariants, for serialization
         #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
         #[derive(Debug, Clone, PartialEq)]
-        pub struct Raw {
+        pub(crate) struct Cereal {
             pub width: usize,
             pub data: Vec<f64>,
         }
 
-        impl Raw {
+        impl Cereal {
             pub fn validate(self) -> Basis {
-                let Raw { width, data } = self;
+                let Cereal { width, data } = self;
                 assert_eq!(data.len() % (2 * width), 0);
                 Basis { width, data }
             }
         }
 
         impl Basis {
-            pub fn raw(self) -> Raw {
+            /// Prepare for serialization.
+            #[cfg(feature = "serde")]
+            pub(crate) fn cereal(self) -> Cereal {
                 let Basis { width, data } = self;
-                Raw { width, data }
+                Cereal { width, data }
             }
+        }
+
+        forward_serde_impls!{
+            serialize: [Basis::cereal]
+            deserialize: [Cereal::validate]
         }
     }
 
@@ -215,7 +248,7 @@ pub(crate) mod compact {
 
         impl Basis {
             pub fn new(norm: Vec<f32>, phase: Vec<u8>, width: usize) -> Basis {
-                Raw { norm, phase, width }.validate()
+                Cereal { norm, phase, width }.validate()
             }
 
             // takes a tuple to be forward-compatible with
@@ -243,17 +276,17 @@ pub(crate) mod compact {
         }
 
         /// Raw data type with no invariants, for serialization
-        #[derive(Debug, Clone, PartialEq)]
         #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-        pub struct Raw {
+        #[derive(Debug, Clone, PartialEq)]
+        pub(crate) struct Cereal {
             pub width: usize,
             pub norm:  Vec<f32>,
             pub phase: Vec<u8>,
         }
 
-        impl Raw {
+        impl Cereal {
             pub fn validate(self) -> Basis {
-                let Raw { width, norm, phase } = self;
+                let Cereal { width, norm, phase } = self;
                 assert_eq!(norm.len(), phase.len());
                 assert_eq!(norm.len() % width, 0);
                 Basis { width, norm, phase }
@@ -261,10 +294,17 @@ pub(crate) mod compact {
         }
 
         impl Basis {
-            pub fn raw(self) -> Raw {
+            #[cfg(feature = "serde")]
+            pub(crate) fn cereal(self) -> Cereal {
                 let Basis { width, norm, phase } = self;
-                Raw { width, norm, phase }
+                Cereal { width, norm, phase }
             }
+        }
+
+
+        forward_serde_impls!{
+            serialize: [Basis::cereal]
+            deserialize: [Cereal::validate]
         }
     }
 
