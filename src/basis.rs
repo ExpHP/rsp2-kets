@@ -115,6 +115,9 @@ pub mod lossless {
                 KetRef { real, imag }
             }
 
+            pub fn real(&self) -> &[f64] { &self.real }
+            pub fn imag(&self) -> &[f64] { &self.imag }
+
             pub fn at(&self, i: usize) -> Rect { self.as_ref().at(i) }
             pub fn overlap<K: AsKetRef>(self, other: &K) -> f64 { self.as_ref().overlap(other) }
             pub fn iter(&self) -> Iter { self.as_ref().iter() }
@@ -146,6 +149,9 @@ pub mod lossless {
                     imag: self.imag[i],
                 }
             }
+
+            pub fn real(&self) -> &[f64] { self.real }
+            pub fn imag(&self) -> &[f64] { self.imag }
 
             pub fn overlap<K: AsKetRef>(self, other: &K) -> f64 {
                 let other = other.as_ket_ref();
@@ -265,6 +271,8 @@ pub mod compact {
                 KetRef { norm, phase }
             }
 
+            pub fn norm(&self) -> &[f32] { &self.norm }
+            pub fn phase(&self) -> &[u8] { &self.phase }
             pub fn at(&self, i: usize) -> Polar { self.as_ref().at(i) }
             pub fn overlap<K: AsKetRef>(self, other: &K) -> f64 { self.as_ref().overlap(other) }
         }
@@ -307,6 +315,8 @@ pub mod compact {
                     .sqnorm() as f64
             }
 
+            pub fn norm(&self) -> &[f32] { self.norm }
+            pub fn phase(&self) -> &[u8] { self.phase }
             pub fn iter(&self) -> Iter<'a> {
                 let KetRef { norm, phase } = *self;
                 Box::new(norm.into_iter().zip(phase)
