@@ -34,7 +34,7 @@ macro_rules! rect_common_impls {
     };
 }
 
-pub mod lossless {
+pub(crate) mod lossless {
     pub struct Rect {
         pub real: f64,
         pub imag: f64,
@@ -43,8 +43,7 @@ pub mod lossless {
     rect_common_impls!(f64);
 }
 
-pub mod compact {
-
+pub(crate) mod compact {
     use ::std::ops::Mul;
 
     pub struct Rect {

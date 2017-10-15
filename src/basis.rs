@@ -79,11 +79,9 @@ macro_rules! impl_common_trash {
 
 /// Full double-precision rectangular representation,
 /// for applications where precision matters.
-pub mod lossless {
-    pub use self::basis::Basis;
-    pub use self::basis::Raw as RawBasis;
-    pub mod basis {
-        use super::KetRef;
+pub(crate) mod lossless {
+    pub(crate) mod basis {
+        use super::ket::KetRef;
 
         pub type Iter<'a> = Box<Iterator<Item=KetRef<'a>> + 'a>;
 
@@ -129,7 +127,7 @@ pub mod lossless {
                 Box::new((0..self.rank()).map(move |i| self.ket(i)))
             }
 
-            pub fn lossy_compress(&self) -> ::basis::compact::Basis {
+            pub fn lossy_compress(&self) -> ::compact::Basis {
                 use ::complex::compact::PhaseTable;
 
                 let table = PhaseTable::get();
@@ -142,7 +140,7 @@ pub mod lossless {
                     }
                 }
                 let width = self.width;
-                ::basis::compact::basis::Raw { width, phase, norm }.validate()
+                ::compact::RawBasis { width, phase, norm }.validate()
             }
         }
 
@@ -170,10 +168,7 @@ pub mod lossless {
         }
     }
 
-    pub use self::ket::Ket;
-    pub use self::ket::KetRef;
-    pub use self::ket::AsKetRef;
-    pub mod ket {
+    pub(crate) mod ket {
         use ::complex::lossless::Rect;
 
         impl_common_trash! {
@@ -198,11 +193,9 @@ pub mod lossless {
 /// A lossily-compressed form that is amenable to further compression.
 ///
 /// Suitable for e.g. band uncrossing.
-pub mod compact {
-    pub use self::basis::Basis;
-    pub use self::basis::Raw as RawBasis;
-    pub mod basis {
-        use super::KetRef;
+pub(crate) mod compact {
+    pub(crate) mod basis {
+        use super::ket::KetRef;
 
         pub type Iter<'a> = Box<Iterator<Item=KetRef<'a>> + 'a>;
 
@@ -275,10 +268,7 @@ pub mod compact {
         }
     }
 
-    pub use self::ket::Ket;
-    pub use self::ket::KetRef;
-    pub use self::ket::AsKetRef;
-    pub mod ket {
+    pub(crate) mod ket {
         use ::complex::compact::{Rect, Polar, PhaseTable};
 
         impl_common_trash! {
