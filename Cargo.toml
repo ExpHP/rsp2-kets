@@ -1,6 +1,6 @@
 [package]
 name = "rsp2-kets"
-version = "0.3.3"
+version = "0.3.4"
 authors = ["Michael Lamparski <diagonaldevice@gmail.com>"]
 
 [dependencies]
