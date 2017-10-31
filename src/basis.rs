@@ -94,6 +94,12 @@ macro_rules! impl_common_trash {
                 Box::new($a.iter().zip($b).map(|(&$a, &$b)| $Complex { $a, $b }))
             }
         }
+
+        impl<'a> IntoIterator for $KetRef<'a> {
+            type Item = $Complex;
+            type IntoIter = Iter<'a>;
+            fn into_iter(self) -> Self::IntoIter { self.iter() }
+        }
     };
 }
 
