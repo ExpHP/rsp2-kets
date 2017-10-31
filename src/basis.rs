@@ -42,6 +42,23 @@ macro_rules! impl_common_trash {
             }
         }
 
+        impl ::std::iter::FromIterator<$Complex> for $Ket {
+            #[inline]
+            fn from_iter<I>(iter: I) -> Self
+            where I: IntoIterator<Item=$Complex>
+            { iter.into_iter().map(|$Complex { $a, $b }| ($a, $b)).collect() }
+        }
+
+        impl ::std::iter::FromIterator<($A, $B)> for $Ket {
+            #[inline]
+            fn from_iter<I>(iter: I) -> Self
+            where I: IntoIterator<Item=($A, $B)>
+            {
+                let ($a, $b) = iter.into_iter().unzip();
+                $Ket { $a, $b }
+            }
+        }
+
         pub trait $AsKetRef { fn as_ket_ref(&self) -> $KetRef; }
         impl<'a> $AsKetRef for $KetRef<'a> { fn as_ket_ref(&self) -> $KetRef { *self } }
         impl $AsKetRef for $Ket { fn as_ket_ref(&self) -> $KetRef { self.as_ref() } }
