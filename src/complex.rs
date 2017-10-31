@@ -2,7 +2,17 @@
 macro_rules! rect_common_impls {
     ($t:ty) => {
         impl Rect {
-            pub fn zero() -> Rect { Rect { real: 0.0, imag: 0.0 } }
+            pub fn zero() -> Rect { 0.0.into() }
+            pub fn one() -> Rect { 1.0.into() }
+            pub fn i() -> Rect { Rect { real: 0.0, imag: 1.0 } }
+
+            pub fn from_phase(radians: $t) -> Rect {
+                Rect {
+                    real: radians.cos(),
+                    imag: radians.sin(),
+                }
+            }
+
             pub fn sqnorm(self) -> $t { self.real * self.real + self.imag * self.imag }
             pub fn conj(self) -> Rect {
                 Rect {
@@ -10,6 +20,10 @@ macro_rules! rect_common_impls {
                     imag: -self.imag,
                 }
             }
+        }
+
+        impl From<$t> for Rect {
+            fn from(x: $t) -> Rect { Rect { real: x, imag: 0.0 } }
         }
 
         impl ::std::ops::Mul<Rect> for Rect {
@@ -57,6 +71,13 @@ pub(crate) mod compact {
     }
 
     impl Polar {
+        pub fn zero() -> Polar { 0_f32.into() }
+        pub fn one() -> Polar { 1_f32.into() }
+
+        pub fn from_phase_byte(byte: u8) -> Polar {
+            Polar { norm: 1.0, phase: byte }
+        }
+
         pub fn sqnorm(self) -> f32 { self.norm * self.norm }
         pub fn conj(self) -> Polar {
             Polar {
@@ -80,6 +101,10 @@ pub(crate) mod compact {
                 phase: self.phase.wrapping_add(other.phase),
             }
         }
+    }
+
+    impl From<f32> for Polar {
+        fn from(x: f32) -> Polar { Polar { norm: x, phase: 0 } }
     }
 
     pub struct PhaseTable {
