@@ -24,6 +24,8 @@ macro_rules! impl_common_trash {
                 $KetRef { $a, $b }
             }
 
+            pub fn len(&self) -> usize { self.$a.len() }
+
             pub fn $a(&self) -> &[$A] { &self.$a }
             pub fn $b(&self) -> &[$B] { &self.$b }
 
