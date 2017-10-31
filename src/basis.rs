@@ -24,7 +24,7 @@ macro_rules! impl_common_trash {
                 $KetRef { $a, $b }
             }
 
-            pub fn len(&self) -> usize { self.$a.len() }
+            pub fn len(&self) -> usize { self.as_ref().len() }
 
             pub fn $a(&self) -> &[$A] { &self.$a }
             pub fn $b(&self) -> &[$B] { &self.$b }
@@ -85,6 +85,7 @@ macro_rules! impl_common_trash {
                 }
             }
 
+            pub fn len(&self) -> usize { self.$a.len() }
             pub fn $a(&self) -> &[$A] { self.$a }
             pub fn $b(&self) -> &[$B] { self.$b }
 
