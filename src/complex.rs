@@ -20,6 +20,10 @@ macro_rules! rect_common_impls {
                     imag: -self.imag,
                 }
             }
+
+            pub fn lexical_cmp(self, other: Rect) -> Option<::std::cmp::Ordering> {
+                (self.real, self.imag).partial_cmp(&(other.real, other.imag))
+            }
         }
 
         impl From<$t> for Rect {
@@ -49,6 +53,10 @@ macro_rules! rect_common_impls {
 }
 
 pub(crate) mod lossless {
+    // N.B. PartialOrd is very deliberately not implemented because
+    //      it could be a huge footgun. Generic code will have to use
+    //      function-based APIs and `lexical_cmp`.
+    #[derive(Debug, Copy, Clone, PartialEq)]
     pub struct Rect {
         pub real: f64,
         pub imag: f64,
@@ -60,11 +68,16 @@ pub(crate) mod lossless {
 pub(crate) mod compact {
     use ::std::ops::Mul;
 
+    // N.B. PartialOrd is very deliberately not implemented because
+    //      it could be a huge footgun. Generic code will have to use
+    //      function-based APIs and `lexical_cmp`.
+    #[derive(Debug, Copy, Clone, PartialEq)]
     pub struct Rect {
         pub real: f32,
         pub imag: f32,
     }
 
+    #[derive(Debug, Copy, Clone, PartialEq)]
     pub struct Polar {
         pub norm: f32,
         pub phase: u8,
