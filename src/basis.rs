@@ -15,29 +15,39 @@ macro_rules! impl_common_trash {
         }
 
         impl $Ket {
+            #[inline]
             pub fn new($a: Vec<$A>, $b: Vec<$B>) -> Self {
                 $Ket { $a, $b }
             }
 
+            #[inline]
             pub fn as_ref(&self) -> $KetRef {
                 let $Ket { ref $a, ref $b } = *self;
                 $KetRef { $a, $b }
             }
 
+            #[inline]
             pub fn len(&self) -> usize { self.as_ref().len() }
 
+            #[inline]
             pub fn $a(&self) -> &[$A] { &self.$a }
+            #[inline]
             pub fn $b(&self) -> &[$B] { &self.$b }
 
             // can't do Index because we can't return a borrow
+            #[inline]
             pub fn at(&self, i: usize) -> $Complex { self.as_ref().at(i) }
+            #[inline]
             pub fn overlap<K: $AsKetRef>(self, other: &K) -> f64 { self.as_ref().overlap(other) }
+            #[inline]
             pub fn iter(&self) -> Iter { self.as_ref().iter() }
         }
 
         impl IntoIterator for $Ket {
             type Item = $Complex;
             type IntoIter = IntoIter;
+
+            #[inline]
             fn into_iter(self) -> Self::IntoIter {
                 let $Ket { $a, $b } = self;
                 Box::new($a.into_iter().zip($b).map(|($a, $b)| $Complex { $a, $b }))
@@ -62,8 +72,15 @@ macro_rules! impl_common_trash {
         }
 
         pub trait $AsKetRef { fn as_ket_ref(&self) -> $KetRef; }
-        impl<'a> $AsKetRef for $KetRef<'a> { fn as_ket_ref(&self) -> $KetRef { *self } }
-        impl $AsKetRef for $Ket { fn as_ket_ref(&self) -> $KetRef { self.as_ref() } }
+
+        impl<'a> $AsKetRef for $KetRef<'a> {
+            #[inline]
+            fn as_ket_ref(&self) -> $KetRef { *self }
+        }
+        impl $AsKetRef for $Ket {
+            #[inline]
+            fn as_ket_ref(&self) -> $KetRef { self.as_ref() }
+        }
 
         /// A not-owned ket.
         #[derive(Debug, Copy, Clone)]
@@ -73,11 +90,13 @@ macro_rules! impl_common_trash {
         }
 
         impl<'a> $KetRef<'a> {
+            #[inline]
             pub fn new($a: &'a [$A], $b: &'a [$B]) -> Self {
                 $KetRef { $a, $b }
             }
 
             // can't do Index because we can't return a borrow
+            #[inline]
             pub fn at(&self, i: usize) -> $Complex {
                 $Complex {
                     $a: self.$a[i],
@@ -85,10 +104,14 @@ macro_rules! impl_common_trash {
                 }
             }
 
+            #[inline]
             pub fn len(&self) -> usize { self.$a.len() }
+            #[inline]
             pub fn $a(&self) -> &[$A] { self.$a }
+            #[inline]
             pub fn $b(&self) -> &[$B] { self.$b }
 
+            #[inline]
             pub fn iter(&self) -> Iter<'a> {
                 let &$KetRef { $a, $b } = self;
                 Box::new($a.iter().zip($b).map(|(&$a, &$b)| $Complex { $a, $b }))
@@ -98,6 +121,7 @@ macro_rules! impl_common_trash {
         impl<'a> IntoIterator for $KetRef<'a> {
             type Item = $Complex;
             type IntoIter = Iter<'a>;
+            #[inline]
             fn into_iter(self) -> Self::IntoIter { self.iter() }
         }
     };
@@ -150,6 +174,7 @@ pub(crate) mod lossless {
         }
 
         impl Basis {
+            #[inline]
             pub fn new(data: Vec<f64>, width: usize) -> Basis {
                 Cereal { data, width }.validate()
             }
@@ -164,9 +189,12 @@ pub(crate) mod lossless {
             }
 
             /// Number of dimensions in a ket.
+            #[inline]
             pub fn width(&self) -> usize { self.width }
             /// Number of kets
+            #[inline]
             pub fn rank(&self) -> usize { self.data.len() / (2 * self.width) }
+            #[inline]
             pub fn ket(&self, i: usize) -> KetRef {
                 let w = self.width;
                 KetRef {
@@ -175,6 +203,7 @@ pub(crate) mod lossless {
                 }
             }
 
+            #[inline]
             pub fn iter(&self) -> Iter {
                 Box::new((0..self.rank()).map(move |i| self.ket(i)))
             }
@@ -205,6 +234,7 @@ pub(crate) mod lossless {
         }
 
         impl Cereal {
+            #[inline]
             pub fn validate(self) -> Basis {
                 let Cereal { width, data } = self;
                 assert_eq!(data.len() % (2 * width), 0);
@@ -273,6 +303,7 @@ pub(crate) mod compact {
         }
 
         impl Basis {
+            #[inline]
             pub fn new(norm: Vec<f32>, phase: Vec<u8>, width: usize) -> Basis {
                 Cereal { norm, phase, width }.validate()
             }
@@ -286,8 +317,11 @@ pub(crate) mod compact {
                 self.phase.extend_from_slice(phase);
             }
 
+            #[inline]
             pub fn rank(&self) -> usize { self.norm.len() / self.width }
+            #[inline]
             pub fn width(&self) -> usize { self.width }
+            #[inline]
             pub fn ket(&self, i: usize) -> KetRef {
                 let w = self.width;
                 KetRef {
@@ -296,6 +330,7 @@ pub(crate) mod compact {
                 }
             }
 
+            #[inline]
             pub fn iter(&self) -> Iter {
                 Box::new((0..self.rank()).map(move |i| self.ket(i)))
             }
@@ -311,6 +346,7 @@ pub(crate) mod compact {
         }
 
         impl Cereal {
+            #[inline]
             pub fn validate(self) -> Basis {
                 let Cereal { width, norm, phase } = self;
                 assert_eq!(norm.len(), phase.len());
@@ -326,7 +362,6 @@ pub(crate) mod compact {
                 Cereal { width, norm, phase }
             }
         }
-
 
         forward_serde_impls!{
             serialize: [Basis::cereal]
@@ -350,7 +385,7 @@ pub(crate) mod compact {
                 let table = PhaseTable::get();
                 (0..self.norm.len())
                     .map(|i| (self.at(i).conj() * other.at(i)).to_rect(table))
-                    .fold(Rect::zero(), |a,b| a + b)
+                    .fold(Rect::zero(), |a, b| a + b)
                     .sqnorm() as f64
             }
         }

@@ -2,10 +2,14 @@
 macro_rules! rect_common_impls {
     ($t:ty) => {
         impl Rect {
+            #[inline(always)]
             pub fn zero() -> Rect { 0.0.into() }
+            #[inline(always)]
             pub fn one() -> Rect { 1.0.into() }
+            #[inline(always)]
             pub fn i() -> Rect { Rect { real: 0.0, imag: 1.0 } }
 
+            #[inline]
             pub fn from_phase(radians: $t) -> Rect {
                 Rect {
                     real: radians.cos(),
@@ -13,7 +17,9 @@ macro_rules! rect_common_impls {
                 }
             }
 
+            #[inline(always)]
             pub fn sqnorm(self) -> $t { self.real * self.real + self.imag * self.imag }
+            #[inline(always)] // (otherwise it doesn't get inlined into `Ket::overlap`)
             pub fn conj(self) -> Rect {
                 Rect {
                     real:  self.real,
@@ -21,17 +27,21 @@ macro_rules! rect_common_impls {
                 }
             }
 
+            #[inline]
             pub fn lexical_cmp(self, other: Rect) -> Option<::std::cmp::Ordering> {
                 (self.real, self.imag).partial_cmp(&(other.real, other.imag))
             }
         }
 
         impl From<$t> for Rect {
+            #[inline(always)]
             fn from(x: $t) -> Rect { Rect { real: x, imag: 0.0 } }
         }
 
         impl ::std::ops::Mul<Rect> for Rect {
             type Output = Rect;
+
+            #[inline(always)]
             fn mul(self, other: Rect) -> Rect {
                 Rect {
                     real: self.real * other.real - self.imag * other.imag,
@@ -42,6 +52,8 @@ macro_rules! rect_common_impls {
 
         impl ::std::ops::Add<Rect> for Rect {
             type Output = Rect;
+
+            #[inline(always)] // (otherwise it doesn't get inlined into `Ket::overlap`)
             fn add(self, other: Rect) -> Rect {
                 Rect {
                     real: self.real + other.real,
@@ -84,20 +96,26 @@ pub(crate) mod compact {
     }
 
     impl Polar {
+        #[inline(always)]
         pub fn zero() -> Polar { 0_f32.into() }
+        #[inline(always)]
         pub fn one() -> Polar { 1_f32.into() }
 
+        #[inline(always)]
         pub fn from_phase_byte(byte: u8) -> Polar {
             Polar { norm: 1.0, phase: byte }
         }
 
+        #[inline(always)]
         pub fn sqnorm(self) -> f32 { self.norm * self.norm }
+        #[inline(always)]
         pub fn conj(self) -> Polar {
             Polar {
                 norm: self.norm,
                 phase: self.phase.wrapping_neg(),
             }
         }
+        #[inline]
         pub fn to_rect(self, table: &PhaseTable) -> Rect {
             Rect {
                 real: self.norm * table.cos(self.phase),
@@ -108,6 +126,8 @@ pub(crate) mod compact {
 
     impl Mul<Polar> for Polar {
         type Output = Polar;
+
+        #[inline(always)]
         fn mul(self, other: Polar) -> Polar {
             Polar {
                 norm: self.norm * other.norm,
@@ -117,10 +137,12 @@ pub(crate) mod compact {
     }
 
     impl From<f32> for Polar {
+        #[inline]
         fn from(x: f32) -> Polar { Polar { norm: x, phase: 0 } }
     }
 
     pub struct PhaseTable {
+        // TODO: these should probably be [f64; 256] for bounds check elimination
         tau: Vec<f32>,
         radians: Vec<f32>,
         sin: Vec<f32>,
@@ -140,11 +162,16 @@ pub(crate) mod compact {
             PhaseTable { tau, radians, sin, cos }
         }
 
+        #[inline]
         pub fn get<'a>() -> &'a PhaseTable { &*PHASE_TABLE }
 
+        #[inline]
         pub fn sin(&self, phase: u8) -> f32 { self.sin[phase as usize] }
+        #[inline]
         pub fn cos(&self, phase: u8) -> f32 { self.cos[phase as usize] }
+        #[inline]
         pub fn radians(&self, phase: u8) -> f32 { self.radians[phase as usize] }
+        #[inline]
         pub fn fraction(&self, phase: u8) -> f32 { self.tau[phase as usize] }
 
         pub fn nearest_phase(&self, phase: f64) -> u8 {
