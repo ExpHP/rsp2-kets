@@ -3,6 +3,7 @@ macro_rules! impl_common_trash {
         types: [$Basis:ident, $Ket:ident, $KetRef:ident]
         traits: [$AsKetRef:ident]
         elements: [$Complex:ident { $a:ident : $A:path, $b:ident : $B:path }]
+        real: [$Real:ident]
     ) => {
         pub type IntoIter = Box<Iterator<Item=$Complex>>;
         pub type Iter<'a> = Box<Iterator<Item=$Complex> + 'a>;
@@ -38,7 +39,7 @@ macro_rules! impl_common_trash {
             #[inline]
             pub fn at(&self, i: usize) -> $Complex { self.as_ref().at(i) }
             #[inline]
-            pub fn overlap<K: $AsKetRef>(self, other: &K) -> f64 { self.as_ref().overlap(other) }
+            pub fn overlap<K: $AsKetRef>(self, other: &K) -> $Real { self.as_ref().overlap(other) }
             #[inline]
             pub fn iter(&self) -> Iter { self.as_ref().iter() }
         }
@@ -264,6 +265,7 @@ pub(crate) mod lossless {
             types: [Basis, Ket, KetRef]
             traits: [AsKetRef]
             elements: [Rect { real: f64, imag: f64 }]
+            real: [f64]
         }
 
         impl<'a> KetRef<'a> {
@@ -376,17 +378,18 @@ pub(crate) mod compact {
             types: [Basis, Ket, KetRef]
             traits: [AsKetRef]
             elements: [Polar { abs: f32, phase: u8 }]
+            real: [f32]
         }
 
         impl<'a> KetRef<'a> {
-            pub fn overlap<K: AsKetRef>(self, other: &K) -> f64 {
+            pub fn overlap<K: AsKetRef>(self, other: &K) -> f32 {
                 let other = other.as_ket_ref();
                 assert_eq!(self.abs.len(), other.abs.len());
                 let table = PhaseTable::get();
                 (0..self.abs.len())
                     .map(|i| (self.at(i).conj() * other.at(i)).to_rect(table))
                     .fold(Rect::zero(), |a, b| a + b)
-                    .sqnorm() as f64
+                    .sqnorm()
             }
         }
     }
