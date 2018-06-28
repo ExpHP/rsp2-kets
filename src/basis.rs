@@ -61,7 +61,7 @@ macro_rules! impl_common_trash {
             pub fn at(&self, i: usize) -> $Complex { self.as_ref().at(i) }
             /// Computes `<self|other><other|self>`
             #[inline]
-            pub fn overlap<K: $AsKetRef>(self, other: K) -> $Real { self.as_ref().overlap(other) }
+            pub fn overlap<K: $AsKetRef>(&self, other: K) -> $Real { self.as_ref().overlap(other) }
             #[inline]
             pub fn iter(&self) -> Iter { self.as_ref().iter() }
         }
@@ -322,11 +322,6 @@ pub(crate) mod lossless {
             }
         }
 
-        #[cfg(test)]
-        fn random_vector(n: usize) -> Vec<f64> {
-            (0..n).map(|_| 0.5 - ::rand::random::<f64>()).collect()
-        }
-
         #[test]
         fn test_orthonormalize() {
             let dim = 200;
@@ -393,6 +388,11 @@ pub(crate) mod lossless {
             pub fn dot<K: AsKetRef>(self, other: K) -> Rect {
                 let other = other.as_ket_ref();
                 assert_eq!(self.real.len(), other.real.len());
+                // NOTE: I'm not sure why, but iterating through all four lists together
+                //       seems to be quite a bit faster (factor of 2) compared to taking
+                //       two lists at a time and summing their elementwise products, especially
+                //       on larger inputs.  I tried measuring cache events with `perf stat` but
+                //       saw nothing extraordinary/didn't know what to look for...
                 (0..self.real.len())
                     .map(|i| (self.at(i).conj() * other.at(i)))
                     .fold(Rect::zero(), |a,b| a + b)
