@@ -5,6 +5,8 @@ extern crate serde;
 extern crate lazy_static;
 #[cfg(test)]
 extern crate rand;
+#[cfg(feature = "faster")]
+extern crate faster;
 
 pub(crate) mod basis;
 pub(crate) mod complex;

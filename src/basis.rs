@@ -385,6 +385,7 @@ pub(crate) mod lossless {
 
         impl<'a> KetRef<'a> {
             /// Computes `<self|other>` (i.e. `self` becomes the bra)
+            #[cfg(not(feature = "faster"))]
             pub fn dot<K: AsKetRef>(self, other: K) -> Rect {
                 let other = other.as_ket_ref();
                 assert_eq!(self.real.len(), other.real.len());
@@ -396,6 +397,48 @@ pub(crate) mod lossless {
                 (0..self.real.len())
                     .map(|i| (self.at(i).conj() * other.at(i)))
                     .fold(Rect::zero(), |a,b| a + b)
+            }
+
+            #[cfg(feature = "faster")]
+            pub fn dot<K: AsKetRef>(self, other: K) -> Rect {
+                use ::faster::prelude::*;
+
+                let other = other.as_ket_ref();
+                assert_eq!(self.real.len(), other.real.len());
+                assert_eq!(self.real.len(), other.imag.len());
+                assert_eq!(self.real.len(), self.imag.len());
+
+                let zero = (f64s(0.0), f64s(0.0));
+                let add = |(ar, ai): (f64s, f64s), (br, bi): (f64s, f64s)| {
+                    (ar + br, ai + bi)
+                };
+                let simd_map_func = |(ar, ai, br, bi): (f64s, f64s, f64s, f64s)| {
+                    let real = ar * br + ai * bi;
+                    let imag = ar * bi - ai * br;
+                    (real, imag)
+                };
+
+                let mut iter = (
+                    // (the defaults of zero here may show up in the unaligned remainder,
+                    //  where they will harmlessly "contribute" to the sum)
+                    self.real.simd_iter(f64s(0.0)),
+                    self.imag.simd_iter(f64s(0.0)),
+                    other.real.simd_iter(f64s(0.0)),
+                    other.imag.simd_iter(f64s(0.0)),
+                ).zip();
+
+                let partial_sums = {
+                    // deal with aligned elements
+                    iter.by_ref()
+                        .map(simd_map_func)
+                        .fold(zero, add)
+                };
+                // deal with unaligned remainder
+                let leftovers = iter.end().map(|(vs, _)| vs).map(simd_map_func).unwrap_or(zero);
+                let (real, imag) = add(partial_sums, leftovers);
+                let (real, imag) = (real.sum(), imag.sum());
+
+                Rect { real, imag }
             }
 
             /// Computes `<self|self>`
@@ -455,6 +498,13 @@ pub(crate) mod lossless {
             let b = KetRef::new(&[0.0, 0.0, 0.0], &[0.0, 1.0, 0.0]);
             assert_eq!(a.dot(b), Rect { real: 0.0, imag: 1.0 });
             assert_eq!(b.dot(a), Rect { real: 0.0, imag: -1.0 });
+
+            // if the above tests failed to ever exercise one of the two code paths
+            // in the SIMD code, this will hopefully exercise both
+            let a = KetRef::new(&[1.0, 0.0, 0.0, 0.0, 1.0], &[0.0, 0.0, 0.0, 0.0, 0.0]);
+            let b = KetRef::new(&[0.0, 0.0, 0.0, 0.0, 0.0], &[1.0, 0.0, 0.0, 0.0, 1.0]);
+            assert_eq!(a.dot(b), Rect { real: 0.0, imag: 2.0 });
+            assert_eq!(b.dot(a), Rect { real: 0.0, imag: -2.0 });
         }
 
 
