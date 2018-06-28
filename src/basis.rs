@@ -212,16 +212,16 @@ pub(crate) mod lossless {
                 use ::complex::compact::PhaseTable;
 
                 let table = PhaseTable::get();
-                let mut norm = vec![];
+                let mut abs = vec![];
                 let mut phase = vec![];
                 for ket in self.iter() {
                     for c in ket.iter() {
                         phase.push(table.nearest_phase(c.imag.atan2(c.real)));
-                        norm.push(c.sqnorm().sqrt() as f32);
+                        abs.push(c.abs() as f32);
                     }
                 }
                 let width = self.width;
-                ::basis::compact::basis::Cereal { width, phase, norm }.validate()
+                ::basis::compact::basis::Cereal { width, phase, abs }.validate()
             }
         }
 
@@ -289,8 +289,8 @@ pub(crate) mod compact {
         pub type Iter<'a> = Box<Iterator<Item=KetRef<'a>> + 'a>;
 
         // invariants:
-        //  - norm.len() == phase.len()
-        //  - norm.len() is divisible by width
+        //  - abs.len() == phase.len()
+        //  - abs.len() is divisible by width
         // contracts that aren't strictly protected as invariants:
         //  - eigenvectors SHOULD be orthogonal
         //  - eigenvectors SHOULD be normalized
@@ -298,14 +298,14 @@ pub(crate) mod compact {
         #[derive(PartialEq)]
         pub struct Basis {
             width: usize,
-            norm:  Vec<f32>,
+            abs:  Vec<f32>,
             phase: Vec<u8>,
         }
 
         impl Basis {
             #[inline]
-            pub fn new(norm: Vec<f32>, phase: Vec<u8>, width: usize) -> Basis {
-                Cereal { norm, phase, width }.validate()
+            pub fn new(abs: Vec<f32>, phase: Vec<u8>, width: usize) -> Basis {
+                Cereal { abs, phase, width }.validate()
             }
 
             // takes a tuple to be forward-compatible with
@@ -313,19 +313,19 @@ pub(crate) mod compact {
             pub fn insert(&mut self, (norm, phase): (&[f32], &[u8])) {
                 assert_eq!(self.width, norm.len());
                 assert_eq!(self.width, phase.len());
-                self.norm.extend_from_slice(norm);
+                self.abs.extend_from_slice(norm);
                 self.phase.extend_from_slice(phase);
             }
 
             #[inline]
-            pub fn rank(&self) -> usize { self.norm.len() / self.width }
+            pub fn rank(&self) -> usize { self.abs.len() / self.width }
             #[inline]
             pub fn width(&self) -> usize { self.width }
             #[inline]
             pub fn ket(&self, i: usize) -> KetRef {
                 let w = self.width;
                 KetRef {
-                    norm:  &self.norm [w * i .. w * (i + 1)],
+                    abs:   &self.abs  [w * i .. w * (i + 1)],
                     phase: &self.phase[w * i .. w * (i + 1)],
                 }
             }
@@ -341,25 +341,25 @@ pub(crate) mod compact {
         #[derive(Debug, Clone, PartialEq)]
         pub(crate) struct Cereal {
             pub width: usize,
-            pub norm:  Vec<f32>,
+            pub abs:   Vec<f32>,
             pub phase: Vec<u8>,
         }
 
         impl Cereal {
             #[inline]
             pub fn validate(self) -> Basis {
-                let Cereal { width, norm, phase } = self;
-                assert_eq!(norm.len(), phase.len());
-                assert_eq!(norm.len() % width, 0);
-                Basis { width, norm, phase }
+                let Cereal { width, abs, phase } = self;
+                assert_eq!(abs.len(), phase.len());
+                assert_eq!(abs.len() % width, 0);
+                Basis { width, abs, phase }
             }
         }
 
         impl Basis {
             #[cfg(feature = "serde")]
             pub(crate) fn cereal(self) -> Cereal {
-                let Basis { width, norm, phase } = self;
-                Cereal { width, norm, phase }
+                let Basis { width, abs, phase } = self;
+                Cereal { width, abs, phase }
             }
         }
 
@@ -375,15 +375,15 @@ pub(crate) mod compact {
         impl_common_trash! {
             types: [Basis, Ket, KetRef]
             traits: [AsKetRef]
-            elements: [Polar { norm: f32, phase: u8 }]
+            elements: [Polar { abs: f32, phase: u8 }]
         }
 
         impl<'a> KetRef<'a> {
             pub fn overlap<K: AsKetRef>(self, other: &K) -> f64 {
                 let other = other.as_ket_ref();
-                assert_eq!(self.norm.len(), other.norm.len());
+                assert_eq!(self.abs.len(), other.abs.len());
                 let table = PhaseTable::get();
-                (0..self.norm.len())
+                (0..self.abs.len())
                     .map(|i| (self.at(i).conj() * other.at(i)).to_rect(table))
                     .fold(Rect::zero(), |a, b| a + b)
                     .sqnorm() as f64

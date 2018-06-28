@@ -19,6 +19,8 @@ macro_rules! rect_common_impls {
 
             #[inline(always)]
             pub fn sqnorm(self) -> $t { self.real * self.real + self.imag * self.imag }
+            #[inline]
+            pub fn abs(self) -> $t { <$t>::hypot(self.real, self.imag) }
             #[inline(always)] // (otherwise it doesn't get inlined into `Ket::overlap`)
             pub fn conj(self) -> Rect {
                 Rect {
@@ -91,7 +93,7 @@ pub(crate) mod compact {
 
     #[derive(Debug, Copy, Clone, PartialEq)]
     pub struct Polar {
-        pub norm: f32,
+        pub abs: f32,
         pub phase: u8,
     }
 
@@ -103,23 +105,23 @@ pub(crate) mod compact {
 
         #[inline(always)]
         pub fn from_phase_byte(byte: u8) -> Polar {
-            Polar { norm: 1.0, phase: byte }
+            Polar { abs: 1.0, phase: byte }
         }
 
         #[inline(always)]
-        pub fn sqnorm(self) -> f32 { self.norm * self.norm }
+        pub fn sqnorm(self) -> f32 { self.abs * self.abs }
         #[inline(always)]
         pub fn conj(self) -> Polar {
             Polar {
-                norm: self.norm,
+                abs: self.abs,
                 phase: self.phase.wrapping_neg(),
             }
         }
         #[inline]
         pub fn to_rect(self, table: &PhaseTable) -> Rect {
             Rect {
-                real: self.norm * table.cos(self.phase),
-                imag: self.norm * table.sin(self.phase),
+                real: self.abs * table.cos(self.phase),
+                imag: self.abs * table.sin(self.phase),
             }
         }
     }
@@ -130,7 +132,7 @@ pub(crate) mod compact {
         #[inline(always)]
         fn mul(self, other: Polar) -> Polar {
             Polar {
-                norm: self.norm * other.norm,
+                abs: self.abs * other.abs,
                 phase: self.phase.wrapping_add(other.phase),
             }
         }
@@ -138,7 +140,7 @@ pub(crate) mod compact {
 
     impl From<f32> for Polar {
         #[inline]
-        fn from(x: f32) -> Polar { Polar { norm: x, phase: 0 } }
+        fn from(x: f32) -> Polar { Polar { abs: x, phase: 0 } }
     }
 
     pub struct PhaseTable {
