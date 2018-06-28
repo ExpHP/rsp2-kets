@@ -2,7 +2,11 @@ macro_rules! impl_common_trash {
     (
         types: [$Basis:ident, $Ket:ident, $KetRef:ident]
         traits: [$AsKetRef:ident]
+        // what the datatype conceptually contains
         elements: [$Complex:ident { $a:ident : $A:path, $b:ident : $B:path }]
+        // even polar datatypes use Rect where summation is required
+        rect: [$Rect:ident]
+        // type of probability
         real: [$Real:ident]
     ) => {
         pub type IntoIter = Box<Iterator<Item=$Complex>>;
@@ -39,10 +43,15 @@ macro_rules! impl_common_trash {
             #[inline]
             pub fn $b(&self) -> &[$B] { &self.$b }
 
+            /// Computes `<self|self>`
             #[inline]
             pub fn sqnorm(&self) -> $Real { self.as_ref().sqnorm() }
             #[inline]
             pub fn norm(&self) -> $Real { self.as_ref().norm() }
+
+            /// Computes `<self|other>` (i.e. `self` becomes the bra)
+            #[inline]
+            pub fn dot<K: $AsKetRef>(&self, other: &K) -> $Rect { self.as_ref().dot(other) }
 
             #[inline]
             pub fn to_normalized(&self) -> $Ket { self.as_ref().to_normalized() }
@@ -50,6 +59,7 @@ macro_rules! impl_common_trash {
             // can't do Index because we can't return a borrow
             #[inline]
             pub fn at(&self, i: usize) -> $Complex { self.as_ref().at(i) }
+            /// Computes `<self|other><other|self>`
             #[inline]
             pub fn overlap<K: $AsKetRef>(self, other: &K) -> $Real { self.as_ref().overlap(other) }
             #[inline]
@@ -103,6 +113,10 @@ macro_rules! impl_common_trash {
             #[inline]
             fn as_ket_ref(&self) -> $KetRef { self.as_ref() }
         }
+        impl<'a, K: $AsKetRef> $AsKetRef for &'a K {
+            #[inline]
+            fn as_ket_ref(&self) -> $KetRef { (**self).as_ket_ref() }
+        }
 
         /// A not-owned ket.
         #[derive(Debug, Copy, Clone)]
@@ -133,10 +147,14 @@ macro_rules! impl_common_trash {
             #[inline]
             pub fn $b(&self) -> &[$B] { self.$b }
 
+            /// Computes `<self|self>`
             #[inline]
             pub fn sqnorm(&self) -> $Real { self.overlap(self) }
             #[inline]
             pub fn norm(&self) -> $Real { self.sqnorm().sqrt() }
+            /// Computes `<self|other><other|self>`
+            #[inline]
+            pub fn overlap<K: $AsKetRef>(&self, other: K) -> $Real { self.dot(other).sqnorm() }
 
             #[inline]
             pub fn to_owned(&self) -> $Ket {
@@ -263,6 +281,8 @@ pub(crate) mod lossless {
             }
         }
 
+
+
         /// Raw data type with no invariants, for serialization
         #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
         #[derive(Debug, Clone, PartialEq)]
@@ -302,17 +322,18 @@ pub(crate) mod lossless {
             types: [Basis, Ket, KetRef]
             traits: [AsKetRef]
             elements: [Rect { real: f64, imag: f64 }]
+            rect: [Rect]
             real: [f64]
         }
 
         impl<'a> KetRef<'a> {
-            pub fn overlap<K: AsKetRef>(self, other: &K) -> f64 {
+            /// Computes `<self|other>` (i.e. `self` becomes the bra)
+            pub fn dot<K: AsKetRef>(self, other: &K) -> Rect {
                 let other = other.as_ket_ref();
                 assert_eq!(self.real.len(), other.real.len());
                 (0..self.real.len())
                     .map(|i| (self.at(i).conj() * other.at(i)))
                     .fold(Rect::zero(), |a,b| a + b)
-                    .sqnorm()
             }
         }
 
@@ -423,18 +444,18 @@ pub(crate) mod compact {
             types: [Basis, Ket, KetRef]
             traits: [AsKetRef]
             elements: [Polar { abs: f32, phase: u8 }]
+            rect: [Rect]
             real: [f32]
         }
 
         impl<'a> KetRef<'a> {
-            pub fn overlap<K: AsKetRef>(self, other: &K) -> f32 {
+            pub fn dot<K: AsKetRef>(self, other: &K) -> Rect {
                 let other = other.as_ket_ref();
                 assert_eq!(self.abs.len(), other.abs.len());
                 let table = PhaseTable::get();
                 (0..self.abs.len())
                     .map(|i| (self.at(i).conj() * other.at(i)).to_rect(table))
                     .fold(Rect::zero(), |a, b| a + b)
-                    .sqnorm()
             }
         }
 
