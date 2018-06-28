@@ -6,3 +6,6 @@ authors = ["Michael Lamparski <diagonaldevice@gmail.com>"]
 [dependencies]
 lazy_static = "0.2"
 serde = { version = "1", optional = true, features = ["derive"] }
+
+[dev-dependencies]
+rand = { version = "0.3" }

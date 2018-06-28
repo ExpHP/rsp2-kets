@@ -3,6 +3,8 @@
 extern crate serde;
 #[macro_use]
 extern crate lazy_static;
+#[cfg(test)]
+extern crate rand;
 
 pub(crate) mod basis;
 pub(crate) mod complex;

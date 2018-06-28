@@ -63,6 +63,18 @@ macro_rules! rect_common_impls {
                 }
             }
         }
+
+        impl ::std::ops::Sub<Rect> for Rect {
+            type Output = Rect;
+
+            #[inline(always)]
+            fn sub(self, other: Rect) -> Rect {
+                Rect {
+                    real: self.real - other.real,
+                    imag: self.imag - other.imag,
+                }
+            }
+        }
     };
 }
 

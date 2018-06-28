@@ -51,7 +51,7 @@ macro_rules! impl_common_trash {
 
             /// Computes `<self|other>` (i.e. `self` becomes the bra)
             #[inline]
-            pub fn dot<K: $AsKetRef>(&self, other: &K) -> $Rect { self.as_ref().dot(other) }
+            pub fn dot<K: $AsKetRef>(&self, other: K) -> $Rect { self.as_ref().dot(other) }
 
             #[inline]
             pub fn to_normalized(&self) -> $Ket { self.as_ref().to_normalized() }
@@ -61,7 +61,7 @@ macro_rules! impl_common_trash {
             pub fn at(&self, i: usize) -> $Complex { self.as_ref().at(i) }
             /// Computes `<self|other><other|self>`
             #[inline]
-            pub fn overlap<K: $AsKetRef>(self, other: &K) -> $Real { self.as_ref().overlap(other) }
+            pub fn overlap<K: $AsKetRef>(self, other: K) -> $Real { self.as_ref().overlap(other) }
             #[inline]
             pub fn iter(&self) -> Iter { self.as_ref().iter() }
         }
@@ -99,6 +99,14 @@ macro_rules! impl_common_trash {
                 let ($a, $b) = iter.into_iter().unzip();
                 $Ket { $a, $b }
             }
+        }
+
+        impl<'a> IntoIterator for &'a super::basis::$Basis {
+            type Item = $KetRef<'a>;
+            type IntoIter = super::basis::Iter<'a>;
+
+            #[inline]
+            fn into_iter(self) -> Self::IntoIter { self.iter() }
         }
 
         pub trait $AsKetRef {
@@ -147,9 +155,6 @@ macro_rules! impl_common_trash {
             #[inline]
             pub fn $b(&self) -> &[$B] { self.$b }
 
-            /// Computes `<self|self>`
-            #[inline]
-            pub fn sqnorm(&self) -> $Real { self.overlap(self) }
             #[inline]
             pub fn norm(&self) -> $Real { self.sqnorm().sqrt() }
             /// Computes `<self|other><other|self>`
@@ -162,6 +167,11 @@ macro_rules! impl_common_trash {
                     $a: self.$a.to_owned(),
                     $b: self.$b.to_owned(),
                 }
+            }
+
+            #[inline]
+            pub fn scale(&self, c: $Complex) -> $Ket {
+                self.iter().map(|x| x * c).collect()
             }
 
             #[inline]
@@ -279,9 +289,61 @@ pub(crate) mod lossless {
                 let width = self.width;
                 ::basis::compact::basis::Cereal { width, phase, abs }.validate()
             }
+
+            // Reminder to self:
+            // Many sources misrepresent the Modified Gram Schmidt method by implying
+            // that its key difference from Classical Gram Schmidt is in its order of
+            // iteration, describing MGS as a method that "looks ahead" and uses each vector
+            // to orthogonalize vectors after it.
+            //
+            // If you work out the data dependencies, however, you will find that this difference
+            // is irrelevant, and that the change in order merely makes the (already present) opportunities
+            // for parallelism more obvious.
+            //
+            // (I won't bother with parallelizing this yet, since we can do *even better* than a
+            //  parallel inner loop by explicitly using rayon::join)
+            //
+            /// Orthonormalize a basis using the Modified Gram Schmidt method.
+            pub fn orthonormalize(&self) -> Basis {
+                let mut out = Basis::new(vec![], self.width);
+                for ket in self {
+                    let mut ket = ket.to_owned();
+                    for bra in &out {
+                        let projected = ket.projected_onto(bra);
+
+                        // ket -= projected
+                        ket.real.iter_mut().zip(projected.real).for_each(|(a, b)| { *a -= b; });
+                        ket.imag.iter_mut().zip(projected.imag).for_each(|(a, b)| { *a -= b; });
+                    }
+                    ket = ket.into_normalized();
+                    out.insert((ket.real(), ket.imag()));
+                }
+                out
+            }
         }
 
+        #[cfg(test)]
+        fn random_vector(n: usize) -> Vec<f64> {
+            (0..n).map(|_| 0.5 - ::rand::random::<f64>()).collect()
+        }
 
+        #[test]
+        fn test_orthonormalize() {
+            let dim = 200;
+            let num_kets = 30;
+
+            let data = (0..dim * num_kets * 2).map(|_| 0.5 - ::rand::random::<f64>()).collect();
+            let basis = Basis::new(data, dim).orthonormalize();
+            for (i, ket) in basis.iter().enumerate() {
+                for (j, bra) in basis.iter().enumerate() {
+                    if i == j {
+                        assert!(f64::abs(ket.overlap(bra) - 1.0) < 1e-12, "({},{}): {}", i, j, ket.overlap(bra));
+                    } else {
+                        assert!(f64::abs(ket.overlap(bra)) < 1e-12, "({},{}): {}", i, j, ket.overlap(bra));
+                    }
+                }
+            }
+        }
 
         /// Raw data type with no invariants, for serialization
         #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -328,12 +390,23 @@ pub(crate) mod lossless {
 
         impl<'a> KetRef<'a> {
             /// Computes `<self|other>` (i.e. `self` becomes the bra)
-            pub fn dot<K: AsKetRef>(self, other: &K) -> Rect {
+            pub fn dot<K: AsKetRef>(self, other: K) -> Rect {
                 let other = other.as_ket_ref();
                 assert_eq!(self.real.len(), other.real.len());
                 (0..self.real.len())
                     .map(|i| (self.at(i).conj() * other.at(i)))
                     .fold(Rect::zero(), |a,b| a + b)
+            }
+
+            /// Computes `<self|self>`
+            pub fn sqnorm(self) -> f64 {
+                self.real.iter().chain(self.imag).map(|x| x*x).sum::<f64>()
+            }
+
+            /// Computes `|other><other|self>`
+            pub fn projected_onto<K: AsKetRef>(self, other: K) -> Ket {
+                let other = other.as_ket_ref();
+                other.scale(other.dot(self))
             }
         }
 
@@ -343,7 +416,48 @@ pub(crate) mod lossless {
                 for x in &mut self.imag { *x /= factor; }
                 self
             }
+
+            #[inline]
+            pub fn projected_onto<K: AsKetRef>(&self, other: K) -> Ket {
+                self.as_ref().projected_onto(other)
+            }
         }
+
+        #[cfg(test)]
+        fn random_vector(n: usize) -> Vec<f64> {
+            (0..n).map(|_| 0.5 - ::rand::random::<f64>()).collect()
+        }
+
+        #[test]
+        fn test_normalize() {
+            let dim = 200;
+            let ket = Ket::new(random_vector(dim), random_vector(dim));
+            assert!(1.0 - f64::abs(ket.to_normalized().norm()) < 1e-12);
+            assert!(1.0 - f64::abs(ket.as_ref().to_normalized().norm()) < 1e-12);
+            assert!(1.0 - f64::abs(ket.into_normalized().norm()) < 1e-12);
+        }
+
+        #[test]
+        fn test_dot() {
+            let a = KetRef::new(&[1.0, 1.0, 3.0], &[0.0, 0.0, 0.0]);
+            let b = KetRef::new(&[1.0, 1.0, 2.0], &[0.0, 0.0, 0.0]);
+            assert_eq!(a.dot(a), Rect { real: 11.0, imag: 0.0 });
+            assert_eq!(a.sqnorm(), 11.0);
+            assert_eq!(a.dot(b), Rect { real: 8.0, imag: 0.0 });
+
+            let a = KetRef::new(&[0.0, 0.0, 0.0], &[1.0, 1.0, 3.0]);
+            let b = KetRef::new(&[0.0, 0.0, 0.0], &[1.0, 1.0, 2.0]);
+            assert_eq!(a.dot(a), Rect { real: 11.0, imag: 0.0 });
+            assert_eq!(a.sqnorm(), 11.0);
+            assert_eq!(a.dot(b), Rect { real: 8.0, imag: 0.0 });
+
+            let a = KetRef::new(&[0.0, 1.0, 0.0], &[0.0, 0.0, 0.0]);
+            let b = KetRef::new(&[0.0, 0.0, 0.0], &[0.0, 1.0, 0.0]);
+            assert_eq!(a.dot(b), Rect { real: 0.0, imag: 1.0 });
+            assert_eq!(b.dot(a), Rect { real: 0.0, imag: -1.0 });
+        }
+
+
     }
 }
 
@@ -449,13 +563,17 @@ pub(crate) mod compact {
         }
 
         impl<'a> KetRef<'a> {
-            pub fn dot<K: AsKetRef>(self, other: &K) -> Rect {
+            pub fn dot<K: AsKetRef>(self, other: K) -> Rect {
                 let other = other.as_ket_ref();
                 assert_eq!(self.abs.len(), other.abs.len());
                 let table = PhaseTable::get();
                 (0..self.abs.len())
                     .map(|i| (self.at(i).conj() * other.at(i)).to_rect(table))
                     .fold(Rect::zero(), |a, b| a + b)
+            }
+
+            pub fn sqnorm(&self) -> f32 {
+                self.abs.iter().map(|x| x*x).sum()
             }
         }
 
