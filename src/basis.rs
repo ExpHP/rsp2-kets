@@ -20,12 +20,16 @@ macro_rules! impl_common_trash {
             pub fn new($a: Vec<$A>, $b: Vec<$B>) -> Self {
                 $Ket { $a, $b }
             }
+        }
 
+        impl $Ket {
             #[inline]
             pub fn as_ref(&self) -> $KetRef {
                 let $Ket { ref $a, ref $b } = *self;
                 $KetRef { $a, $b }
             }
+
+            // methods forwarded to KetRef
 
             #[inline]
             pub fn len(&self) -> usize { self.as_ref().len() }
@@ -35,6 +39,14 @@ macro_rules! impl_common_trash {
             #[inline]
             pub fn $b(&self) -> &[$B] { &self.$b }
 
+            #[inline]
+            pub fn sqnorm(&self) -> $Real { self.as_ref().sqnorm() }
+            #[inline]
+            pub fn norm(&self) -> $Real { self.as_ref().norm() }
+
+            #[inline]
+            pub fn to_normalized(&self) -> $Ket { self.as_ref().to_normalized() }
+
             // can't do Index because we can't return a borrow
             #[inline]
             pub fn at(&self, i: usize) -> $Complex { self.as_ref().at(i) }
@@ -42,6 +54,13 @@ macro_rules! impl_common_trash {
             pub fn overlap<K: $AsKetRef>(self, other: &K) -> $Real { self.as_ref().overlap(other) }
             #[inline]
             pub fn iter(&self) -> Iter { self.as_ref().iter() }
+        }
+
+        impl $Ket {
+            pub fn into_normalized(self) -> $Ket {
+                let norm = self.norm();
+                self.div_real(norm)
+            }
         }
 
         impl IntoIterator for $Ket {
@@ -72,7 +91,9 @@ macro_rules! impl_common_trash {
             }
         }
 
-        pub trait $AsKetRef { fn as_ket_ref(&self) -> $KetRef; }
+        pub trait $AsKetRef {
+            fn as_ket_ref(&self) -> $KetRef;
+        }
 
         impl<'a> $AsKetRef for $KetRef<'a> {
             #[inline]
@@ -111,6 +132,22 @@ macro_rules! impl_common_trash {
             pub fn $a(&self) -> &[$A] { self.$a }
             #[inline]
             pub fn $b(&self) -> &[$B] { self.$b }
+
+            #[inline]
+            pub fn sqnorm(&self) -> $Real { self.overlap(self) }
+            #[inline]
+            pub fn norm(&self) -> $Real { self.sqnorm().sqrt() }
+
+            #[inline]
+            pub fn to_owned(&self) -> $Ket {
+                $Ket {
+                    $a: self.$a.to_owned(),
+                    $b: self.$b.to_owned(),
+                }
+            }
+
+            #[inline]
+            pub fn to_normalized(&self) -> $Ket { self.to_owned().into_normalized() }
 
             #[inline]
             pub fn iter(&self) -> Iter<'a> {
@@ -278,6 +315,14 @@ pub(crate) mod lossless {
                     .sqnorm()
             }
         }
+
+        impl Ket {
+            fn div_real(mut self, factor: f64) -> Ket {
+                for x in &mut self.real { *x /= factor; }
+                for x in &mut self.imag { *x /= factor; }
+                self
+            }
+        }
     }
 }
 
@@ -390,6 +435,13 @@ pub(crate) mod compact {
                     .map(|i| (self.at(i).conj() * other.at(i)).to_rect(table))
                     .fold(Rect::zero(), |a, b| a + b)
                     .sqnorm()
+            }
+        }
+
+        impl Ket {
+            fn div_real(mut self, factor: f32) -> Ket {
+                for x in &mut self.abs { *x /= factor; }
+                self
             }
         }
     }
