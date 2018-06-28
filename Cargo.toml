@@ -7,9 +7,23 @@ authors = ["Michael Lamparski <diagonaldevice@gmail.com>"]
 lazy_static = "0.2"
 serde = { version = "1", optional = true, features = ["derive"] }
 
+[dependencies.faster]
+# version with support for stable 1.27, but it has a cargo setting that
+# is not supported on stable
+git = "https://github.com/AdamNiederer/faster"
+rev = "5cf052e326def8e480d97c7bfd48552ecff23f78"
+optional = true
+
 [dev-dependencies]
 rand = "0.3"
-criterion = "0.2"
+
+[dev-dependencies.criterion]
+# get unreleased features from 0.2.4 (--save-baseline)
+git = "https://github.com/japaric/criterion.rs"
+rev = "4420e5a"
+
+[features]
+default = []
 
 [[bench]]
 name = "overlap"
