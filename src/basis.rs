@@ -408,37 +408,20 @@ pub(crate) mod lossless {
                 assert_eq!(self.real.len(), other.imag.len());
                 assert_eq!(self.real.len(), self.imag.len());
 
-                let zero = (f64s(0.0), f64s(0.0));
-                let add = |(ar, ai): (f64s, f64s), (br, bi): (f64s, f64s)| {
-                    (ar + br, ai + bi)
-                };
-                let simd_map_func = |(ar, ai, br, bi): (f64s, f64s, f64s, f64s)| {
-                    let real = ar * br + ai * bi;
-                    let imag = ar * bi - ai * br;
-                    (real, imag)
-                };
-
-                let mut iter = (
-                    // (the defaults of zero here may show up in the unaligned remainder,
-                    //  where they will harmlessly "contribute" to the sum)
+                let mut acc = Rect::zero();
+                (
                     self.real.simd_iter(f64s(0.0)),
                     self.imag.simd_iter(f64s(0.0)),
                     other.real.simd_iter(f64s(0.0)),
                     other.imag.simd_iter(f64s(0.0)),
-                ).zip();
+                ).zip()
+                    .simd_do_each(|(ar, ai, br, bi)| {
+                        let real = (ar * br + ai * bi).sum();
+                        let imag = (ar * bi - ai * br).sum();
+                        acc = acc + Rect { real, imag };
+                    });
 
-                let partial_sums = {
-                    // deal with aligned elements
-                    iter.by_ref()
-                        .map(simd_map_func)
-                        .fold(zero, add)
-                };
-                // deal with unaligned remainder
-                let leftovers = iter.end().map(|(vs, _)| vs).map(simd_map_func).unwrap_or(zero);
-                let (real, imag) = add(partial_sums, leftovers);
-                let (real, imag) = (real.sum(), imag.sum());
-
-                Rect { real, imag }
+                acc
             }
 
             /// Computes `<self|self>`
