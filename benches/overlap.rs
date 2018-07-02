@@ -27,6 +27,16 @@ fn bench_orthonormalize_30(c: &mut Criterion) {
     );
 }
 
+fn bench_sqnorm(c: &mut Criterion) {
+    c.bench_function_over_inputs(
+        "sqnorm",
+        |b, &&n| {
+            let ket = generate_ket(n);
+            b.iter(|| ket.sqnorm() );
+        },
+        &[16, 64, 256, 1024, 4096, 4096*2, 4096*4, 4096*8, 4096*16],
+    );
+}
 
 fn bench_overlap(c: &mut Criterion) {
     c.bench_function_over_inputs(
@@ -41,9 +51,11 @@ fn bench_overlap(c: &mut Criterion) {
 }
 
 criterion_group!{
-    name = benches_overlap;
+    name = benches_dot;
     config = Criterion::default();
-    targets = bench_overlap,
+    targets =
+        bench_overlap,
+        bench_sqnorm,
 }
 
 criterion_group!{
@@ -53,6 +65,6 @@ criterion_group!{
 }
 
 criterion_main!{
-    benches_overlap,
+    benches_dot,
     benches_orthonormalize,
 }
