@@ -4,6 +4,7 @@ macro_rules! impl_common_trash {
         traits: [$AsKetRef:ident]
         // what the datatype conceptually contains
         elements: [$Complex:ident { $a:ident : $A:path, $b:ident : $B:path }]
+        muts: [$a_mut:ident, $b_mut: ident]
         // even polar datatypes use Rect where summation is required
         rect: [$Rect:ident]
         // type of probability
@@ -33,15 +34,20 @@ macro_rules! impl_common_trash {
                 $KetRef { $a, $b }
             }
 
-            // methods forwarded to KetRef
-
-            #[inline]
-            pub fn len(&self) -> usize { self.as_ref().len() }
-
             #[inline]
             pub fn $a(&self) -> &[$A] { &self.$a }
             #[inline]
             pub fn $b(&self) -> &[$B] { &self.$b }
+
+            #[inline]
+            pub fn $a_mut(&mut self) -> &mut [$A] { &mut self.$a }
+            #[inline]
+            pub fn $b_mut(&mut self) -> &mut [$B] { &mut self.$b }
+
+            // methods forwarded to KetRef
+
+            #[inline]
+            pub fn len(&self) -> usize { self.as_ref().len() }
 
             /// Computes `<self|self>`
             #[inline]
@@ -379,6 +385,7 @@ pub(crate) mod lossless {
             types: [Basis, Ket, KetRef]
             traits: [AsKetRef]
             elements: [Rect { real: f64, imag: f64 }]
+            muts: [real_mut, imag_mut]
             rect: [Rect]
             real: [f64]
         }
@@ -465,32 +472,39 @@ pub(crate) mod lossless {
 
         #[test]
         fn test_dot() {
+            // imaginary dotted against real
             let a = KetRef::new(&[1.0, 1.0, 3.0], &[0.0, 0.0, 0.0]);
             let b = KetRef::new(&[1.0, 1.0, 2.0], &[0.0, 0.0, 0.0]);
             assert_eq!(a.dot(a), Rect { real: 11.0, imag: 0.0 });
             assert_eq!(a.sqnorm(), 11.0);
             assert_eq!(a.dot(b), Rect { real: 8.0, imag: 0.0 });
 
+            // imaginary dotted against imaginary
             let a = KetRef::new(&[0.0, 0.0, 0.0], &[1.0, 1.0, 3.0]);
             let b = KetRef::new(&[0.0, 0.0, 0.0], &[1.0, 1.0, 2.0]);
             assert_eq!(a.dot(a), Rect { real: 11.0, imag: 0.0 });
             assert_eq!(a.sqnorm(), 11.0);
             assert_eq!(a.dot(b), Rect { real: 8.0, imag: 0.0 });
 
+            // real dotted against imaginary
             let a = KetRef::new(&[0.0, 1.0, 0.0], &[0.0, 0.0, 0.0]);
             let b = KetRef::new(&[0.0, 0.0, 0.0], &[0.0, 1.0, 0.0]);
             assert_eq!(a.dot(b), Rect { real: 0.0, imag: 1.0 });
             assert_eq!(b.dot(a), Rect { real: 0.0, imag: -1.0 });
 
+            // sqnorm with both real and imaginary
+            let a = KetRef::new(&[3.0], &[4.0]);
+            assert_eq!(a.sqnorm(), 25.0);
+
             // if the above tests failed to ever exercise one of the two code paths
             // in the SIMD code, this will hopefully exercise both
-            let a = KetRef::new(&[1.0, 0.0, 0.0, 0.0, 1.0], &[0.0, 0.0, 0.0, 0.0, 0.0]);
-            let b = KetRef::new(&[0.0, 0.0, 0.0, 0.0, 0.0], &[1.0, 0.0, 0.0, 0.0, 1.0]);
-            assert_eq!(a.dot(b), Rect { real: 0.0, imag: 2.0 });
-            assert_eq!(b.dot(a), Rect { real: 0.0, imag: -2.0 });
+            let a = KetRef::new(&[1.0, 0.0, 0.0, 0.0, 2.0], &[0.0, 0.0, 0.0, 0.0, 0.0]);
+            let b = KetRef::new(&[0.0, 0.0, 0.0, 0.0, 0.0], &[1.0, 0.0, 0.0, 0.0, 2.0]);
+            assert_eq!(a.sqnorm(), 5.0);
+            assert_eq!(b.sqnorm(), 5.0);
+            assert_eq!(a.dot(b), Rect { real: 0.0, imag: 5.0 });
+            assert_eq!(b.dot(a), Rect { real: 0.0, imag: -5.0 });
         }
-
-
     }
 }
 
@@ -591,6 +605,7 @@ pub(crate) mod compact {
             types: [Basis, Ket, KetRef]
             traits: [AsKetRef]
             elements: [Polar { abs: f32, phase: u8 }]
+            muts: [abs_mut, phase_mut]
             rect: [Rect]
             real: [f32]
         }
