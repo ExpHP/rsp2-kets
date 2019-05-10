@@ -3,7 +3,7 @@
 ```toml
 [dependencies.rsp2-kets]
 git = "https://github.com/ExpHP/rsp2-kets"
-version = "0.3"
+tag = "v0.4.0"
 features = ["serde"]
 ```
 
